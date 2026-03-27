@@ -4,10 +4,13 @@ RackMap Builder is a minimalist dark-theme web app for creating homelab topology
 
 ## Features
 
-- Drag devices from a palette onto an SVG canvas
-- Reposition nodes by dragging
+- Drag device cards from a palette onto an SVG canvas
+- Reposition cards by dragging
+- Resize cards directly from the bottom-right corner handle
 - Connect nodes with links using **Connect mode**
-- Edit selected node properties (label, shape, size, colors)
+- Rename devices from the side panel or by double-clicking a card
+- Edit selected node properties (size and colors)
+- Built-in device icons for server/router/switch/firewall/NAS/VM cards
 - Customize diagram theme (canvas, grid, links, default node styling)
 - Export your finished diagram as a PNG
 

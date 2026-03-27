@@ -1,5 +1,9 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 const VIEW_BOX = { width: 1600, height: 1000 };
+const MIN_NODE_WIDTH = 130;
+const MAX_NODE_WIDTH = 420;
+const MIN_NODE_HEIGHT = 90;
+const MAX_NODE_HEIGHT = 260;
 
 const DEFAULT_THEME = {
   canvasBg: "#0e1420",
@@ -11,12 +15,12 @@ const DEFAULT_THEME = {
 };
 
 const TEMPLATE_LIBRARY = {
-  server: { label: "Server", shape: "rect", width: 160, height: 84 },
-  router: { label: "Router", shape: "circle", width: 120, height: 120 },
-  switch: { label: "Switch", shape: "rect", width: 190, height: 64 },
-  firewall: { label: "Firewall", shape: "diamond", width: 140, height: 95 },
-  nas: { label: "NAS", shape: "rect", width: 145, height: 92 },
-  vm: { label: "VM", shape: "rect", width: 120, height: 70 },
+  server: { label: "Server", width: 210, height: 120, subtitle: "Compute Node", icon: "server" },
+  router: { label: "Router", width: 200, height: 115, subtitle: "Gateway", icon: "router" },
+  switch: { label: "Switch", width: 210, height: 112, subtitle: "Network Fabric", icon: "switch" },
+  firewall: { label: "Firewall", width: 210, height: 116, subtitle: "Security Edge", icon: "firewall" },
+  nas: { label: "NAS", width: 210, height: 124, subtitle: "Storage", icon: "nas" },
+  vm: { label: "VM", width: 190, height: 108, subtitle: "Virtual Machine", icon: "vm" },
 };
 
 const state = {
@@ -28,7 +32,7 @@ const state = {
   connectMode: false,
   linkStartNodeId: null,
   theme: { ...DEFAULT_THEME },
-  dragSession: null,
+  interactionSession: null,
 };
 
 const refs = {
@@ -46,7 +50,6 @@ const refs = {
   resetThemeBtn: document.getElementById("resetThemeBtn"),
   selectionHint: document.getElementById("selectionHint"),
   nodeLabelInput: document.getElementById("nodeLabelInput"),
-  nodeShapeInput: document.getElementById("nodeShapeInput"),
   nodeWidthInput: document.getElementById("nodeWidthInput"),
   nodeHeightInput: document.getElementById("nodeHeightInput"),
   nodeFillInput: document.getElementById("nodeFillInput"),
@@ -78,13 +81,13 @@ function bindPaletteDrag() {
   const items = document.querySelectorAll(".palette-item");
   for (const item of items) {
     item.addEventListener("dragstart", (event) => {
-      const template = item.dataset.template;
-      if (!template) {
+      const templateKey = item.dataset.template;
+      if (!templateKey) {
         return;
       }
-      event.dataTransfer.setData("text/plain", template);
+      event.dataTransfer.setData("text/plain", templateKey);
       event.dataTransfer.effectAllowed = "copy";
-      setStatus("Drop on canvas to create a node.");
+      setStatus("Drop on canvas to create a device card.");
     });
   }
 }
@@ -98,12 +101,11 @@ function bindCanvasInteractions() {
   refs.svg.addEventListener("drop", (event) => {
     event.preventDefault();
     const templateKey = event.dataTransfer.getData("text/plain");
-    const template = TEMPLATE_LIBRARY[templateKey];
-    if (!template) {
+    if (!TEMPLATE_LIBRARY[templateKey]) {
       return;
     }
     const point = screenToSvg(event.clientX, event.clientY);
-    addNodeFromTemplate(template, point.x, point.y);
+    addNodeFromTemplate(templateKey, point.x, point.y);
   });
 
   refs.svg.addEventListener("pointerdown", (event) => {
@@ -123,42 +125,81 @@ function bindCanvasInteractions() {
       return;
     }
 
+    const node = getNodeById(nodeId);
+    if (!node) {
+      return;
+    }
+
     selectNode(nodeId);
     const point = screenToSvg(event.clientX, event.clientY);
-    const node = getNodeById(nodeId);
-    state.dragSession = {
+    const isResizeTarget = Boolean(event.target.closest(".resize-handle"));
+
+    state.interactionSession = {
+      type: isResizeTarget ? "resize" : "drag",
       nodeId,
       pointerStart: point,
-      nodeStart: { x: node.x, y: node.y },
+      nodeStart: { x: node.x, y: node.y, width: node.width, height: node.height },
     };
 
+    if (isResizeTarget) {
+      setStatus("Resizing node. Drag corner to size it.");
+    }
+
     nodeGroup.setPointerCapture(event.pointerId);
+    event.preventDefault();
   });
 
   refs.svg.addEventListener("pointermove", (event) => {
-    if (!state.dragSession) {
+    const session = state.interactionSession;
+    if (!session) {
       return;
     }
-    const session = state.dragSession;
     const node = getNodeById(session.nodeId);
     if (!node) {
       return;
     }
+
     const point = screenToSvg(event.clientX, event.clientY);
     const deltaX = point.x - session.pointerStart.x;
     const deltaY = point.y - session.pointerStart.y;
-    node.x = session.nodeStart.x + deltaX;
-    node.y = session.nodeStart.y + deltaY;
+
+    if (session.type === "drag") {
+      node.x = session.nodeStart.x + deltaX;
+      node.y = session.nodeStart.y + deltaY;
+    } else {
+      const left = session.nodeStart.x - session.nodeStart.width / 2;
+      const top = session.nodeStart.y - session.nodeStart.height / 2;
+      node.width = clamp(session.nodeStart.width + deltaX, MIN_NODE_WIDTH, MAX_NODE_WIDTH);
+      node.height = clamp(session.nodeStart.height + deltaY, MIN_NODE_HEIGHT, MAX_NODE_HEIGHT);
+      node.x = left + node.width / 2;
+      node.y = top + node.height / 2;
+    }
+
     constrainNode(node);
+    if (node.id === state.selectedNodeId) {
+      updateInspectorValues(node);
+    }
     render();
   });
 
-  const clearDrag = () => {
-    state.dragSession = null;
+  refs.svg.addEventListener("dblclick", (event) => {
+    const nodeGroup = event.target.closest(".node-group");
+    if (!nodeGroup) {
+      return;
+    }
+    const nodeId = Number(nodeGroup.dataset.nodeId);
+    if (Number.isFinite(nodeId)) {
+      renameNodeWithPrompt(nodeId);
+    }
+  });
+
+  const stopInteraction = () => {
+    state.interactionSession = null;
+    updateInspector();
   };
-  refs.svg.addEventListener("pointerup", clearDrag);
-  refs.svg.addEventListener("pointercancel", clearDrag);
-  window.addEventListener("pointerup", clearDrag);
+  refs.svg.addEventListener("pointerup", stopInteraction);
+  refs.svg.addEventListener("pointercancel", stopInteraction);
+  window.addEventListener("pointerup", stopInteraction);
 }
 
 function bindToolbar() {
@@ -193,7 +234,7 @@ function bindToolbar() {
       return;
     }
     const nodeId = state.selectedNodeId;
-    state.nodes = state.nodes.filter((n) => n.id !== nodeId);
+    state.nodes = state.nodes.filter((node) => node.id !== nodeId);
     state.links = state.links.filter(
       (link) => link.fromNodeId !== nodeId && link.toNodeId !== nodeId
     );
@@ -212,16 +253,7 @@ function bindInspector() {
     if (!node) {
       return;
     }
-    node.label = refs.nodeLabelInput.value.trim() || "Node";
-    render();
-  });
-
-  refs.nodeShapeInput.addEventListener("change", () => {
-    const node = getSelectedNode();
-    if (!node) {
-      return;
-    }
-    node.shape = refs.nodeShapeInput.value;
+    node.label = refs.nodeLabelInput.value.trim() || "Device";
     render();
   });
 
@@ -278,10 +310,12 @@ function bindThemeControls() {
     state.theme.canvasBg = refs.themeCanvasBg.value;
     applyThemeToCanvas();
   });
+
   refs.themeGridColor.addEventListener("input", () => {
     state.theme.gridColor = refs.themeGridColor.value;
     applyThemeToCanvas();
   });
+
   refs.themeLinkColor.addEventListener("input", () => {
     state.theme.linkColor = refs.themeLinkColor.value;
     for (const link of state.links) {
@@ -289,12 +323,15 @@ function bindThemeControls() {
     }
     render();
   });
+
   refs.themeNodeFill.addEventListener("input", () => {
     state.theme.nodeFill = refs.themeNodeFill.value;
   });
+
   refs.themeNodeStroke.addEventListener("input", () => {
     state.theme.nodeStroke = refs.themeNodeStroke.value;
   });
+
   refs.themeTextColor.addEventListener("input", () => {
     state.theme.textColor = refs.themeTextColor.value;
   });
@@ -322,11 +359,17 @@ function bindThemeControls() {
   });
 }
 
-function addNodeFromTemplate(template, x, y) {
+function addNodeFromTemplate(templateKey, x, y) {
+  const template = TEMPLATE_LIBRARY[templateKey];
+  if (!template) {
+    return;
+  }
   const node = {
     id: state.nextNodeId++,
     label: template.label,
-    shape: template.shape,
+    subtitle: template.subtitle,
+    icon: template.icon,
+    deviceType: templateKey,
     x,
     y,
     width: template.width,
@@ -340,6 +383,27 @@ function addNodeFromTemplate(template, x, y) {
   selectNode(node.id);
   render();
   setStatus(`${node.label} added.`);
+}
+
+function renameNodeWithPrompt(nodeId) {
+  const node = getNodeById(nodeId);
+  if (!node) {
+    return;
+  }
+  const next = window.prompt("Rename device", node.label);
+  if (next === null) {
+    return;
+  }
+  const label = next.trim();
+  if (!label) {
+    return;
+  }
+  node.label = label;
+  if (node.id === state.selectedNodeId) {
+    updateInspectorValues(node);
+  }
+  render();
+  setStatus("Node renamed.");
 }
 
 function handleConnectClick(nodeId) {
@@ -359,6 +423,7 @@ function handleConnectClick(nodeId) {
       (link.fromNodeId === state.linkStartNodeId && link.toNodeId === nodeId) ||
       (link.toNodeId === state.linkStartNodeId && link.fromNodeId === nodeId)
   );
+
   if (!existing) {
     state.links.push({
       id: state.nextLinkId++,
@@ -383,27 +448,96 @@ function render() {
 function renderNodes() {
   refs.nodesLayer.replaceChildren();
   for (const node of state.nodes) {
-    const group = document.createElementNS(SVG_NS, "g");
-    group.classList.add("node-group");
+    const group = createSvgElement("g", { "data-node-id": String(node.id) }, "node-group");
     if (node.id === state.selectedNodeId) {
       group.classList.add("is-selected");
     }
-    group.dataset.nodeId = String(node.id);
 
-    const shape = createShape(node);
-    shape.classList.add("node-shape");
-    shape.setAttribute("fill", node.fill);
-    shape.setAttribute("stroke", node.stroke);
-    shape.setAttribute("stroke-width", "2");
-    group.appendChild(shape);
+    const left = node.x - node.width / 2;
+    const top = node.y - node.height / 2;
+    const padding = 14;
+    const iconWrapSize = clamp(node.height * 0.42, 30, 46);
+    const iconWrapX = left + padding;
+    const iconWrapY = top + padding;
 
-    const label = document.createElementNS(SVG_NS, "text");
-    label.classList.add("node-label");
-    label.setAttribute("x", String(node.x));
-    label.setAttribute("y", String(node.y));
-    label.setAttribute("fill", node.textColor);
-    label.textContent = node.label;
-    group.appendChild(label);
+    const card = createSvgElement(
+      "rect",
+      {
+        x: String(left),
+        y: String(top),
+        width: String(node.width),
+        height: String(node.height),
+        rx: "12",
+        ry: "12",
+        fill: node.fill,
+        stroke: node.stroke,
+        "stroke-width": "2",
+      },
+      "node-card"
+    );
+    group.appendChild(card);
+
+    const iconWrap = createSvgElement(
+      "rect",
+      {
+        x: String(iconWrapX),
+        y: String(iconWrapY),
+        width: String(iconWrapSize),
+        height: String(iconWrapSize),
+        rx: "8",
+        ry: "8",
+      },
+      "node-icon-wrap"
+    );
+    group.appendChild(iconWrap);
+
+    const icon = createDeviceIcon(
+      node.icon || "server",
+      iconWrapX + iconWrapSize / 2,
+      iconWrapY + iconWrapSize / 2,
+      iconWrapSize * 0.64,
+      node.stroke
+    );
+    group.appendChild(icon);
+
+    const title = createSvgElement(
+      "text",
+      {
+        x: String(iconWrapX + iconWrapSize + 12),
+        y: String(top + padding + 2),
+        fill: node.textColor,
+      },
+      "node-title"
+    );
+    title.textContent = node.label;
+    group.appendChild(title);
+
+    const subtitle = createSvgElement(
+      "text",
+      {
+        x: String(iconWrapX + iconWrapSize + 12),
+        y: String(top + padding + 25),
+        fill: node.textColor,
+        opacity: "0.72",
+      },
+      "node-subtitle"
+    );
+    subtitle.textContent = node.subtitle || node.deviceType.toUpperCase();
+    group.appendChild(subtitle);
+
+    const handle = createSvgElement(
+      "rect",
+      {
+        x: String(left + node.width - 13),
+        y: String(top + node.height - 13),
+        width: "10",
+        height: "10",
+        rx: "2",
+        ry: "2",
+      },
+      "resize-handle"
+    );
+    group.appendChild(handle);
 
     refs.nodesLayer.appendChild(group);
   }
@@ -417,51 +551,207 @@ function renderLinks() {
     if (!fromNode || !toNode) {
       continue;
     }
-    const line = document.createElementNS(SVG_NS, "line");
-    line.classList.add("link-line");
-    line.setAttribute("x1", String(fromNode.x));
-    line.setAttribute("y1", String(fromNode.y));
-    line.setAttribute("x2", String(toNode.x));
-    line.setAttribute("y2", String(toNode.y));
-    line.setAttribute("stroke", link.color || state.theme.linkColor);
+    const line = createSvgElement(
+      "line",
+      {
+        x1: String(fromNode.x),
+        y1: String(fromNode.y),
+        x2: String(toNode.x),
+        y2: String(toNode.y),
+        stroke: link.color || state.theme.linkColor,
+      },
+      "link-line"
+    );
     refs.linksLayer.appendChild(line);
   }
 }
 
-function createShape(node) {
-  if (node.shape === "circle") {
-    const circle = document.createElementNS(SVG_NS, "ellipse");
-    circle.setAttribute("cx", String(node.x));
-    circle.setAttribute("cy", String(node.y));
-    circle.setAttribute("rx", String(Math.max(28, node.width / 2)));
-    circle.setAttribute("ry", String(Math.max(28, node.height / 2)));
-    return circle;
-  }
+function createDeviceIcon(iconType, cx, cy, size, color) {
+  const group = createSvgElement("g", {}, "node-icon-stroke");
+  group.setAttribute("stroke", color);
+  const half = size / 2;
 
-  if (node.shape === "diamond") {
-    const polygon = document.createElementNS(SVG_NS, "polygon");
-    const halfW = node.width / 2;
-    const halfH = node.height / 2;
-    polygon.setAttribute(
-      "points",
-      [
-        `${node.x},${node.y - halfH}`,
-        `${node.x + halfW},${node.y}`,
-        `${node.x},${node.y + halfH}`,
-        `${node.x - halfW},${node.y}`,
-      ].join(" ")
+  if (iconType === "server") {
+    group.appendChild(
+      createSvgElement("rect", {
+        x: String(cx - half),
+        y: String(cy - half + 1),
+        width: String(size),
+        height: String(size - 2),
+        rx: "3",
+        ry: "3",
+      })
     );
-    return polygon;
+    group.appendChild(
+      createSvgElement("line", {
+        x1: String(cx - half + 4),
+        y1: String(cy - 1),
+        x2: String(cx + half - 4),
+        y2: String(cy - 1),
+      })
+    );
+    group.appendChild(
+      createSvgElement("line", {
+        x1: String(cx - half + 4),
+        y1: String(cy + 6),
+        x2: String(cx + half - 4),
+        y2: String(cy + 6),
+      })
+    );
+    return group;
   }
 
-  const rect = document.createElementNS(SVG_NS, "rect");
-  rect.setAttribute("x", String(node.x - node.width / 2));
-  rect.setAttribute("y", String(node.y - node.height / 2));
-  rect.setAttribute("width", String(node.width));
-  rect.setAttribute("height", String(node.height));
-  rect.setAttribute("rx", "9");
-  rect.setAttribute("ry", "9");
-  return rect;
+  if (iconType === "router") {
+    group.appendChild(
+      createSvgElement("circle", { cx: String(cx), cy: String(cy + 2), r: String(size * 0.24) })
+    );
+    group.appendChild(
+      createSvgElement("line", {
+        x1: String(cx),
+        y1: String(cy - half + 1),
+        x2: String(cx),
+        y2: String(cy - size * 0.02),
+      })
+    );
+    group.appendChild(
+      createSvgElement("line", {
+        x1: String(cx - size * 0.26),
+        y1: String(cy + size * 0.14),
+        x2: String(cx + size * 0.26),
+        y2: String(cy + size * 0.14),
+      })
+    );
+    return group;
+  }
+
+  if (iconType === "switch") {
+    group.appendChild(
+      createSvgElement("rect", {
+        x: String(cx - half),
+        y: String(cy - size * 0.26),
+        width: String(size),
+        height: String(size * 0.52),
+        rx: "2",
+        ry: "2",
+      })
+    );
+    const step = size / 4.8;
+    for (let i = -1.5; i <= 1.5; i += 1) {
+      group.appendChild(
+        createSvgElement("circle", {
+          cx: String(cx + i * step),
+          cy: String(cy),
+          r: String(size * 0.05),
+        })
+      );
+    }
+    return group;
+  }
+
+  if (iconType === "firewall") {
+    group.appendChild(
+      createSvgElement("rect", {
+        x: String(cx - half),
+        y: String(cy - half),
+        width: String(size),
+        height: String(size),
+        rx: "2",
+        ry: "2",
+      })
+    );
+    group.appendChild(
+      createSvgElement("line", {
+        x1: String(cx - half),
+        y1: String(cy),
+        x2: String(cx + half),
+        y2: String(cy),
+      })
+    );
+    group.appendChild(
+      createSvgElement("line", {
+        x1: String(cx - size * 0.17),
+        y1: String(cy - half),
+        x2: String(cx - size * 0.17),
+        y2: String(cy),
+      })
+    );
+    group.appendChild(
+      createSvgElement("line", {
+        x1: String(cx + size * 0.17),
+        y1: String(cy),
+        x2: String(cx + size * 0.17),
+        y2: String(cy + half),
+      })
+    );
+    return group;
+  }
+
+  if (iconType === "nas") {
+    group.appendChild(
+      createSvgElement("ellipse", {
+        cx: String(cx),
+        cy: String(cy - size * 0.2),
+        rx: String(size * 0.32),
+        ry: String(size * 0.12),
+      })
+    );
+    group.appendChild(
+      createSvgElement("ellipse", {
+        cx: String(cx),
+        cy: String(cy + size * 0.12),
+        rx: String(size * 0.32),
+        ry: String(size * 0.12),
+      })
+    );
+    group.appendChild(
+      createSvgElement("line", {
+        x1: String(cx - size * 0.32),
+        y1: String(cy - size * 0.2),
+        x2: String(cx - size * 0.32),
+        y2: String(cy + size * 0.12),
+      })
+    );
+    group.appendChild(
+      createSvgElement("line", {
+        x1: String(cx + size * 0.32),
+        y1: String(cy - size * 0.2),
+        x2: String(cx + size * 0.32),
+        y2: String(cy + size * 0.12),
+      })
+    );
+    return group;
+  }
+
+  group.appendChild(
+    createSvgElement("rect", {
+      x: String(cx - half),
+      y: String(cy - half),
+      width: String(size),
+      height: String(size),
+      rx: "3",
+      ry: "3",
+    })
+  );
+  group.appendChild(
+    createSvgElement("line", {
+      x1: String(cx - half + 4),
+      y1: String(cy - half + 8),
+      x2: String(cx + half - 4),
+      y2: String(cy - half + 8),
+    })
+  );
+  return group;
+}
+
+function createSvgElement(tag, attributes = {}, className = "") {
+  const element = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attributes)) {
+    element.setAttribute(key, value);
+  }
+  if (className) {
+    element.setAttribute("class", className);
+  }
+  return element;
 }
 
 function selectNode(nodeId) {
@@ -475,7 +765,6 @@ function updateInspector() {
   const disabled = !node;
 
   refs.nodeLabelInput.disabled = disabled;
-  refs.nodeShapeInput.disabled = disabled;
   refs.nodeWidthInput.disabled = disabled;
   refs.nodeHeightInput.disabled = disabled;
   refs.nodeFillInput.disabled = disabled;
@@ -483,14 +772,19 @@ function updateInspector() {
   refs.nodeTextInput.disabled = disabled;
 
   if (!node) {
-    refs.selectionHint.textContent = "Select a node to edit it.";
+    refs.selectionHint.textContent = "Select a node to edit it. Double-click node title to rename.";
     refs.nodeLabelInput.value = "";
+    refs.nodeWidthInput.value = String(MIN_NODE_WIDTH);
+    refs.nodeHeightInput.value = String(MIN_NODE_HEIGHT);
     return;
   }
 
-  refs.selectionHint.textContent = `Editing node #${node.id}`;
+  refs.selectionHint.textContent = `Editing node #${node.id}. Drag corner to resize.`;
+  updateInspectorValues(node);
+}
+
+function updateInspectorValues(node) {
   refs.nodeLabelInput.value = node.label;
-  refs.nodeShapeInput.value = node.shape;
   refs.nodeWidthInput.value = String(node.width);
   refs.nodeHeightInput.value = String(node.height);
   refs.nodeFillInput.value = node.fill;

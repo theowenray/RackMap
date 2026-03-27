@@ -188,16 +188,52 @@ button[aria-pressed="true"] {
   cursor: move;
 }
 
-.node-group.is-selected .node-shape {
+.node-group.is-selected .node-card {
   stroke: #8fc0ff !important;
-  stroke-width: 3;
-  filter: drop-shadow(0 0 5px rgba(84, 165, 255, 0.4));
+  stroke-width: 2.6;
+  filter: drop-shadow(0 0 8px rgba(84, 165, 255, 0.45));
 }
 
-.node-label {
-  font-size: 15px;
-  dominant-baseline: middle;
-  text-anchor: middle;
+.node-title {
+  font-size: 17px;
+  font-weight: 600;
+  dominant-baseline: hanging;
+}
+
+.node-subtitle {
+  font-size: 12px;
+  fill: #96a8cc;
+  dominant-baseline: hanging;
+}
+
+.node-icon-wrap {
+  fill: #0f182a;
+  stroke: rgba(150, 178, 233, 0.4);
+  stroke-width: 1.2;
+}
+
+.node-icon-stroke {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.resize-handle {
+  cursor: nwse-resize;
+  fill: #1d2d47;
+  stroke: #6fa4ff;
+  stroke-width: 1;
+  opacity: 0.2;
+}
+
+.node-group.is-selected .resize-handle {
+  opacity: 0.95;
+}
+
+.resize-handle-hit {
+  cursor: nwse-resize;
+  fill: transparent;
   pointer-events: none;
 }
 

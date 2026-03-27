@@ -23,8 +23,8 @@
     <main class="app-shell">
       <aside class="panel panel--left">
         <section>
-          <h2>Shape Palette</h2>
-          <p class="hint">Drag a shape onto the canvas.</p>
+          <h2>Device Palette</h2>
+          <p class="hint">Drag a device onto the canvas.</p>
           <div class="palette">
             <button class="palette-item" draggable="true" data-template="server" type="button">Server</button>
             <button class="palette-item" draggable="true" data-template="router" type="button">Router</button>
@@ -91,26 +91,18 @@
       <aside class="panel panel--right">
         <section>
           <h2>Selected Node</h2>
-          <p id="selectionHint" class="hint">Select a node to edit it.</p>
+          <p id="selectionHint" class="hint">Select a node to edit it. Double-click node title to rename.</p>
           <label>
             Label
             <input id="nodeLabelInput" type="text" placeholder="Node name" />
           </label>
           <label>
-            Shape
-            <select id="nodeShapeInput">
-              <option value="rect">Rectangle</option>
-              <option value="circle">Circle</option>
-              <option value="diamond">Diamond</option>
-            </select>
-          </label>
-          <label>
             Width
-            <input id="nodeWidthInput" type="range" min="70" max="280" step="5" />
+            <input id="nodeWidthInput" type="range" min="130" max="420" step="2" />
           </label>
           <label>
             Height
-            <input id="nodeHeightInput" type="range" min="45" max="220" step="5" />
+            <input id="nodeHeightInput" type="range" min="90" max="260" step="2" />
           </label>
           <label>
             Fill
@@ -129,7 +121,7 @@
     </main>
 
     <footer class="statusbar">
-      <span id="statusText">Tip: Drag a device from the palette to start.</span>
+      <span id="statusText">Tip: Drag a device from the palette, then drag its bottom-right corner to resize.</span>
     </footer>
 
     <script src="./app.js"></script>
