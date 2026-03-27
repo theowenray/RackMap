@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RackMap Builder</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="toolbar__title">
+        <h1>RackMap Builder</h1>
+        <p>Build your homelab diagram by drag and drop</p>
+      </div>
+      <div class="toolbar__actions">
+        <button id="newDiagramBtn" type="button">New</button>
+        <button id="connectModeBtn" type="button" aria-pressed="false">Connect</button>
+        <button id="deleteSelectedBtn" type="button">Delete</button>
+        <button id="exportPngBtn" type="button">Export PNG</button>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <aside class="panel panel--left">
+        <section>
+          <h2>Shape Palette</h2>
+          <p class="hint">Drag a shape onto the canvas.</p>
+          <div class="palette">
+            <button class="palette-item" draggable="true" data-template="server" type="button">Server</button>
+            <button class="palette-item" draggable="true" data-template="router" type="button">Router</button>
+            <button class="palette-item" draggable="true" data-template="switch" type="button">Switch</button>
+            <button class="palette-item" draggable="true" data-template="firewall" type="button">Firewall</button>
+            <button class="palette-item" draggable="true" data-template="nas" type="button">NAS</button>
+            <button class="palette-item" draggable="true" data-template="vm" type="button">VM</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Diagram Theme</h2>
+          <label>
+            Canvas background
+            <input id="themeCanvasBg" type="color" />
+          </label>
+          <label>
+            Grid color
+            <input id="themeGridColor" type="color" />
+          </label>
+          <label>
+            Default link color
+            <input id="themeLinkColor" type="color" />
+          </label>
+          <label>
+            Default node fill
+            <input id="themeNodeFill" type="color" />
+          </label>
+          <label>
+            Default node stroke
+            <input id="themeNodeStroke" type="color" />
+          </label>
+          <label>
+            Default text color
+            <input id="themeTextColor" type="color" />
+          </label>
+          <button id="applyThemeBtn" type="button">Apply defaults to all nodes</button>
+          <button id="resetThemeBtn" class="ghost-btn" type="button">Reset dark theme</button>
+        </section>
+      </aside>
+
+      <section class="canvas-area">
+        <div id="canvasHost" class="canvas-host">
+          <svg
+            id="diagramSvg"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 1600 1000"
+            role="application"
+            aria-label="Homelab diagram editor canvas"
+          >
+            <defs>
+              <pattern id="gridPattern" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path id="gridPatternPath" d="M 40 0 L 0 0 0 40" fill="none" />
+              </pattern>
+            </defs>
+            <rect id="canvasBackground" x="0" y="0" width="1600" height="1000" />
+            <rect id="canvasGrid" x="0" y="0" width="1600" height="1000" fill="url(#gridPattern)" />
+            <g id="linksLayer"></g>
+            <g id="nodesLayer"></g>
+          </svg>
+        </div>
+      </section>
+
+      <aside class="panel panel--right">
+        <section>
+          <h2>Selected Node</h2>
+          <p id="selectionHint" class="hint">Select a node to edit it.</p>
+          <label>
+            Label
+            <input id="nodeLabelInput" type="text" placeholder="Node name" />
+          </label>
+          <label>
+            Shape
+            <select id="nodeShapeInput">
+              <option value="rect">Rectangle</option>
+              <option value="circle">Circle</option>
+              <option value="diamond">Diamond</option>
+            </select>
+          </label>
+          <label>
+            Width
+            <input id="nodeWidthInput" type="range" min="70" max="280" step="5" />
+          </label>
+          <label>
+            Height
+            <input id="nodeHeightInput" type="range" min="45" max="220" step="5" />
+          </label>
+          <label>
+            Fill
+            <input id="nodeFillInput" type="color" />
+          </label>
+          <label>
+            Stroke
+            <input id="nodeStrokeInput" type="color" />
+          </label>
+          <label>
+            Text
+            <input id="nodeTextInput" type="color" />
+          </label>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusText">Tip: Drag a device from the palette to start.</span>
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
