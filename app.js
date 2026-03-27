@@ -147,14 +147,18 @@ function bindCanvasInteractions() {
     const point = screenToSvg(event.clientX, event.clientY);
     const deltaX = point.x - session.pointerStart.x;
     const deltaY = point.y - session.pointerStart.y;
-    node.x = clamp(session.nodeStart.x + deltaX, 35, VIEW_BOX.width - 35);
-    node.y = clamp(session.nodeStart.y + deltaY, 35, VIEW_BOX.height - 35);
+    node.x = session.nodeStart.x + deltaX;
+    node.y = session.nodeStart.y + deltaY;
+    constrainNode(node);
     render();
   });
 
-  refs.svg.addEventListener("pointerup", () => {
+  const clearDrag = () => {
     state.dragSession = null;
-  });
+  };
+  refs.svg.addEventListener("pointerup", clearDrag);
+  refs.svg.addEventListener("pointercancel", clearDrag);
+  window.addEventListener("pointerup", clearDrag);
 }
 
 function bindToolbar() {
@@ -227,6 +231,7 @@ function bindInspector() {
       return;
     }
     node.width = Number(refs.nodeWidthInput.value);
+    constrainNode(node);
     render();
   });
 
@@ -236,6 +241,7 @@ function bindInspector() {
       return;
     }
     node.height = Number(refs.nodeHeightInput.value);
+    constrainNode(node);
     render();
   });
 
@@ -278,6 +284,9 @@ function bindThemeControls() {
   });
   refs.themeLinkColor.addEventListener("input", () => {
     state.theme.linkColor = refs.themeLinkColor.value;
+    for (const link of state.links) {
+      link.color = state.theme.linkColor;
+    }
     render();
   });
   refs.themeNodeFill.addEventListener("input", () => {
@@ -295,6 +304,9 @@ function bindThemeControls() {
       node.fill = state.theme.nodeFill;
       node.stroke = state.theme.nodeStroke;
       node.textColor = state.theme.textColor;
+    }
+    for (const link of state.links) {
+      link.color = state.theme.linkColor;
     }
     render();
     updateInspector();
@@ -315,14 +327,15 @@ function addNodeFromTemplate(template, x, y) {
     id: state.nextNodeId++,
     label: template.label,
     shape: template.shape,
-    x: clamp(x, 35, VIEW_BOX.width - 35),
-    y: clamp(y, 35, VIEW_BOX.height - 35),
+    x,
+    y,
     width: template.width,
     height: template.height,
     fill: state.theme.nodeFill,
     stroke: state.theme.nodeStroke,
     textColor: state.theme.textColor,
   };
+  constrainNode(node);
   state.nodes.push(node);
   selectNode(node.id);
   render();
@@ -453,9 +466,6 @@ function createShape(node) {
 
 function selectNode(nodeId) {
   state.selectedNodeId = nodeId;
-  if (state.connectMode) {
-    return;
-  }
   updateInspector();
   render();
 }
@@ -558,6 +568,13 @@ function getSelectedNode() {
     return null;
   }
   return getNodeById(state.selectedNodeId);
+}
+
+function constrainNode(node) {
+  const halfWidth = Math.max(35, node.width / 2);
+  const halfHeight = Math.max(35, node.height / 2);
+  node.x = clamp(node.x, halfWidth, VIEW_BOX.width - halfWidth);
+  node.y = clamp(node.y, halfHeight, VIEW_BOX.height - halfHeight);
 }
 
 function clamp(value, min, max) {
